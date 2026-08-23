@@ -111,8 +111,10 @@ cells.append(code(r'''
 USE_FULL_PAPER_SETTINGS = False
 
 # ── Model ──
-MODEL_NAME  = "meta-llama/Llama-3.2-1B"
-MODEL_DTYPE = torch.float16
+# TinyLlama is public and runs on Kaggle without a Hugging Face token.
+# Replace with meta-llama/Llama-3.2-1B after configuring HF_TOKEN if needed.
+MODEL_NAME  = "TinyLlama/TinyLlama_v1.1"
+MODEL_DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
 
 if USE_FULL_PAPER_SETTINGS:
     # Paper Sec. 5.1 — full protocol
@@ -207,10 +209,14 @@ train_ids = tokenizer(train_text, return_tensors="pt").input_ids
 print(f"Test tokens:  {test_ids.shape[1]:,}")
 print(f"Train tokens: {train_ids.shape[1]:,}")
 
-# Sample calibration sequences (Sec. 5.1: 128 random 2048-token sequences)
+# Sample calibration sequences from valid contiguous token ranges.
 g = torch.Generator().manual_seed(0)
-max_start = train_ids.shape[1] - CALIB_SEQLEN - 1
-starts = torch.randint(0, max_start, (CALIB_SEQS,), generator=g)
+available_tokens = train_ids.shape[1]
+if available_tokens < 2:
+    raise ValueError("Training data must contain at least two tokens")
+CALIB_SEQLEN = min(CALIB_SEQLEN, available_tokens - 1)
+max_start = available_tokens - CALIB_SEQLEN
+starts = torch.randint(0, max_start + 1, (CALIB_SEQS,), generator=g)
 calib_batches = [train_ids[:, s:s + CALIB_SEQLEN].to(DEVICE) for s in starts]
 print(f"Prepared {len(calib_batches)} calibration sequences of length {CALIB_SEQLEN}.")
 '''))
